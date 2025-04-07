@@ -6,6 +6,9 @@
 app = 'fleet-telemetry'
 primary_region = 'cdg'
 
+[processes]
+  app = "/bin/sh /app/entrypoint.sh"
+
 [build]
   image = "tesla/fleet-telemetry:latest"
 
