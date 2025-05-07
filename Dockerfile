@@ -1,35 +1,27 @@
-# Start by building the application.
-FROM golang:1.23-bullseye AS build
+# Dockerfile
+# --- Stage 1: Récupérer le binaire de l'image officielle ---
+FROM tesla/fleet-telemetry:latest as extractor
 
-# build libsodium (dep of libzmq)
-WORKDIR /build
-RUN wget https://github.com/jedisct1/libsodium/releases/download/1.0.19-RELEASE/libsodium-1.0.19.tar.gz
-RUN tar -xzvf libsodium-1.0.19.tar.gz
-WORKDIR /build/libsodium-stable
-RUN ./configure --disable-shared --enable-static
-RUN make -j`nproc`
-RUN make install
+# --- Stage 2: Image finale basée sur Debian (qui contient /bin/sh) ---
+FROM debian:stable-slim
 
-# build libzmq (dep of zmq datastore)
-WORKDIR /build
-RUN wget https://github.com/zeromq/libzmq/releases/download/v4.3.4/zeromq-4.3.4.tar.gz
-RUN tar -xvf zeromq-4.3.4.tar.gz
-WORKDIR /build/zeromq-4.3.4
-RUN ./configure --enable-static --disable-shared --disable-Werror
-RUN make -j`nproc`
-RUN make install
+# Installer les certificats CA (bonne pratique, souvent nécessaire pour HTTPS sortant, ex: vers GCP)
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /go/src/fleet-telemetry
+# Définir le répertoire de travail (optionnel mais propre)
+WORKDIR /app
 
-COPY . .
-ENV CGO_ENABLED=1
-ENV CGO_LDFLAGS="-lstdc++"
+# Copier le binaire fleet-telemetry depuis le stage extractor
+COPY --from=extractor /fleet-telemetry /usr/local/bin/fleet-telemetry
 
-RUN make
+# Copier notre script d'entrypoint personnalisé
+COPY ./fly/entrypoint.sh /app/entrypoint.sh
 
-# hadolint ignore=DL3006
-FROM gcr.io/distroless/cc-debian11:nonroot
-WORKDIR /
-COPY --from=build /go/bin/fleet-telemetry /
+# Rendre l'entrypoint exécutable DANS le conteneur
+RUN chmod +x /app/entrypoint.sh
 
-CMD ["/fleet-telemetry", "-config", "/etc/fleet-telemetry/config.json"]
+# Définir l'entrypoint pour utiliser notre script via le shell
+ENTRYPOINT ["/bin/sh", "/app/entrypoint.sh"]
+
+# Exposer le port (documentaire, Fly utilise la section [services])
+EXPOSE 443

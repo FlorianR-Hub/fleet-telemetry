@@ -1,0 +1,22 @@
+# fly.toml
+
+app = 'fleet-telemetry'
+primary_region = 'ams'
+
+[build]
+
+[[services]]
+  auto_start_machines = true
+  auto_stop_machines = 'suspend'
+  min_machines_running = 0
+  protocol = 'tcp'
+  internal_port = 443
+  processes = ['app']
+
+  [[services.ports]]
+    port = 443
+
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1
